@@ -92,9 +92,21 @@ jobs:
             -e SNYK_INTEGRATION_VERSION="${{ steps.snyk-integration.outputs.version }}" \
             -w /project \
             ${{ steps.snyk-image.outputs.image }} \
-            snyk test --json --all-projects > snyk-results.json || true
+            snyk test --json --all-projects > snyk-results.json
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Debug - Log Snyk JSON results
+        if: always()
+        run: |
+          echo "==================================="
+          echo "Snyk JSON Results (Debug)"
+          echo "==================================="
+          if [ -f snyk-results.json ]; then
+            cat snyk-results.json
+          else
+            echo "snyk-results.json file not found"
+          fi
 
       - name: Analyze Snyk results for severity thresholds
         id: analyze-results
