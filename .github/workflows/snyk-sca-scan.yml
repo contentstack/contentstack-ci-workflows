@@ -84,6 +84,14 @@ jobs:
         id: snyk-test
         continue-on-error: true
         run: |
+          LANGUAGE="${{ inputs.language }}"
+          # For Go projects, don't use --all-projects as it tries to scan GOROOT
+          if [ "$LANGUAGE" = "golang" ] || [ "$LANGUAGE" = "go" ]; then
+            SNYK_ARGS="--json"
+          else
+            SNYK_ARGS="--json --all-projects"
+          fi
+
           docker run --rm \
             -v "$PWD:/project" \
             -e SNYK_TOKEN="${{ secrets.SNYK_TOKEN }}" \
@@ -92,7 +100,7 @@ jobs:
             -e SNYK_INTEGRATION_VERSION="${{ steps.snyk-integration.outputs.version }}" \
             -w /project \
             ${{ steps.snyk-image.outputs.image }} \
-            snyk test --json --all-projects > snyk-results.json
+            snyk test $SNYK_ARGS > snyk-results.json || true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
