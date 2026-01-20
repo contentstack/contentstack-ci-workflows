@@ -46,80 +46,53 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Determine Snyk Docker image
-        id: snyk-image
-        run: |
-          LANGUAGE="${{ inputs.language }}"
-          if [ -z "$LANGUAGE" ]; then
-            # Default to node image for auto-detection (Snyk will auto-detect all projects)
-            IMAGE="snyk/snyk:node"
-          else
-            # Map language to Snyk Docker image
-            case "$LANGUAGE" in
-              golang|go)
-                IMAGE="snyk/snyk:golang"
-                ;;
-              npm|node|nodejs)
-                IMAGE="snyk/snyk:node"
-                ;;
-              pip|python)
-                IMAGE="snyk/snyk:python"
-                ;;
-              *)
-                # Default to node if language not recognized
-                IMAGE="snyk/snyk:node"
-                ;;
-            esac
-          fi
-          echo "image=$IMAGE" >> $GITHUB_OUTPUT
-          echo "Using Snyk image: $IMAGE"
-
-      - name: Determine Snyk integration version
-        id: snyk-integration
-        run: |
-          LANGUAGE="${{ inputs.language }}"
-          if [ -z "$LANGUAGE" ]; then
-            INTEGRATION_VERSION="all-projects"
-          else
-            INTEGRATION_VERSION="$LANGUAGE"
-          fi
-          echo "version=$INTEGRATION_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Run Snyk to check for vulnerabilities
-        id: snyk-test
+      - name: Run Snyk to check for vulnerabilities (Golang)
+        if: inputs.language == 'golang' || inputs.language == 'go'
+        id: snyk-test-golang
         continue-on-error: true
-        run: |
-          USER_ARGS="${{ inputs.args }}"
-
-          if [ -n "$USER_ARGS" ]; then
-            # Remove --json if user provided it (handle both --json and --json=...)
-            CLEANED_ARGS=$(echo "$USER_ARGS" | sed 's/--json[= ]*[^ ]*//g' | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
-            SNYK_ARGS="--json $CLEANED_ARGS"
-          else
-            SNYK_ARGS="--json"
-          fi
-
-          echo "==================================="
-          echo "Snyk Command Debug Info"
-          echo "==================================="
-          echo "User Args Input: '$USER_ARGS'"
-          echo "Language: '$LANGUAGE'"
-          echo "Final Snyk Args: '$SNYK_ARGS'"
-          echo "Docker Image: ${{ steps.snyk-image.outputs.image }}"
-          echo "Full Command: snyk test $SNYK_ARGS"
-          echo "==================================="
-
-          docker run --rm \
-            -v "$PWD:/project" \
-            -e SNYK_TOKEN="${{ secrets.SNYK_TOKEN }}" \
-            -e FORCE_COLOR=2 \
-            -e SNYK_INTEGRATION_NAME=GITHUB_ACTIONS \
-            -e SNYK_INTEGRATION_VERSION="${{ steps.snyk-integration.outputs.version }}" \
-            -w /project \
-            ${{ steps.snyk-image.outputs.image }} \
-            snyk test $SNYK_ARGS > snyk-results.json
+        uses: snyk/actions/golang@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: test
+          json: true
+          args: ${{ inputs.args }}
+
+      - name: Run Snyk to check for vulnerabilities (Node.js)
+        if: inputs.language == 'node' || inputs.language == 'npm' || inputs.language == 'nodejs'
+        id: snyk-test-node
+        continue-on-error: true
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: test
+          json: true
+          args: ${{ inputs.args }}
+
+      - name: Run Snyk to check for vulnerabilities (Python)
+        if: inputs.language == 'python' || inputs.language == 'pip'
+        id: snyk-test-python
+        continue-on-error: true
+        uses: snyk/actions/python@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: test
+          json: true
+          args: ${{ inputs.args }}
+
+      - name: Run Snyk to check for vulnerabilities (Default/Auto-detect)
+        if: inputs.language == '' || (inputs.language != 'golang' && inputs.language != 'go' && inputs.language != 'node' && inputs.language != 'npm' && inputs.language != 'nodejs' && inputs.language != 'python' && inputs.language != 'pip')
+        id: snyk-test-default
+        continue-on-error: true
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: test
+          json: true
+          args: ${{ inputs.args }}
 
       - name: Debug - Log Snyk JSON results
         if: always()
@@ -127,10 +100,10 @@ jobs:
           echo "==================================="
           echo "Snyk JSON Results (Debug)"
           echo "==================================="
-          if [ -f snyk-results.json ]; then
-            cat snyk-results.json
+          if [ -f snyk.json ]; then
+            cat snyk.json
           else
-            echo "snyk-results.json file not found"
+            echo "snyk.json file not found"
           fi
 
       - name: Analyze Snyk results for severity thresholds
@@ -184,22 +157,22 @@ jobs:
           low_count=0
 
           # Check if results file exists
-          if [ ! -f snyk-results.json ]; then
+          if [ ! -f snyk.json ]; then
             echo "Error: Snyk results file not found"
             exit 1
           fi
 
           # Parse JSON and count severities - ONLY count vulnerabilities with fixes available
-          critical_count=$(jq -r '[.vulnerabilities[]? | select(.severity == "critical" and (.isUpgradable == true or .isPatchable == true))] | length' snyk-results.json 2>/dev/null || echo 0)
-          high_count=$(jq -r '[.vulnerabilities[]? | select(.severity == "high" and (.isUpgradable == true or .isPatchable == true))] | length' snyk-results.json 2>/dev/null || echo 0)
-          medium_count=$(jq -r '[.vulnerabilities[]? | select(.severity == "medium" and (.isUpgradable == true or .isPatchable == true))] | length' snyk-results.json 2>/dev/null || echo 0)
-          low_count=$(jq -r '[.vulnerabilities[]? | select(.severity == "low" and (.isUpgradable == true or .isPatchable == true))] | length' snyk-results.json 2>/dev/null || echo 0)
+          critical_count=$(jq -r '[.vulnerabilities[]? | select(.severity == "critical" and (.isUpgradable == true or .isPatchable == true))] | length' snyk.json 2>/dev/null || echo 0)
+          high_count=$(jq -r '[.vulnerabilities[]? | select(.severity == "high" and (.isUpgradable == true or .isPatchable == true))] | length' snyk.json 2>/dev/null || echo 0)
+          medium_count=$(jq -r '[.vulnerabilities[]? | select(.severity == "medium" and (.isUpgradable == true or .isPatchable == true))] | length' snyk.json 2>/dev/null || echo 0)
+          low_count=$(jq -r '[.vulnerabilities[]? | select(.severity == "low" and (.isUpgradable == true or .isPatchable == true))] | length' snyk.json 2>/dev/null || echo 0)
 
           # Count vulnerabilities without fixes
-          critical_no_fix=$(jq -r '[.vulnerabilities[]? | select(.severity == "critical" and (.isUpgradable != true and .isPatchable != true))] | length' snyk-results.json 2>/dev/null || echo 0)
-          high_no_fix=$(jq -r '[.vulnerabilities[]? | select(.severity == "high" and (.isUpgradable != true and .isPatchable != true))] | length' snyk-results.json 2>/dev/null || echo 0)
-          medium_no_fix=$(jq -r '[.vulnerabilities[]? | select(.severity == "medium" and (.isUpgradable != true and .isPatchable != true))] | length' snyk-results.json 2>/dev/null || echo 0)
-          low_no_fix=$(jq -r '[.vulnerabilities[]? | select(.severity == "low" and (.isUpgradable != true and .isPatchable != true))] | length' snyk-results.json 2>/dev/null || echo 0)
+          critical_no_fix=$(jq -r '[.vulnerabilities[]? | select(.severity == "critical" and (.isUpgradable != true and .isPatchable != true))] | length' snyk.json 2>/dev/null || echo 0)
+          high_no_fix=$(jq -r '[.vulnerabilities[]? | select(.severity == "high" and (.isUpgradable != true and .isPatchable != true))] | length' snyk.json 2>/dev/null || echo 0)
+          medium_no_fix=$(jq -r '[.vulnerabilities[]? | select(.severity == "medium" and (.isUpgradable != true and .isPatchable != true))] | length' snyk.json 2>/dev/null || echo 0)
+          low_no_fix=$(jq -r '[.vulnerabilities[]? | select(.severity == "low" and (.isUpgradable != true and .isPatchable != true))] | length' snyk.json 2>/dev/null || echo 0)
 
           # Export counts to GITHUB_ENV for next steps
           echo "critical_count=$critical_count" >> $GITHUB_ENV
@@ -262,14 +235,14 @@ jobs:
                  select(.severity == $sev and (.isUpgradable == true or .isPatchable == true)) |
                  select(.publicationTime != null) |
                  select(($current | tonumber) - (.publicationTime | fromdateiso8601) > ($threshold | tonumber * 86400))] | 
-                length' snyk-results.json 2>/dev/null || echo 0
+                length' snyk.json 2>/dev/null || echo 0
             else
               jq --arg current "$current_time" --arg threshold "$threshold" --arg sev "$severity" -r '
                 [.vulnerabilities[]? | 
                  select(.severity == $sev and (.isUpgradable != true and .isPatchable != true)) |
                  select(.publicationTime != null) |
                  select(($current | tonumber) - (.publicationTime | fromdateiso8601) > ($threshold | tonumber * 86400))] | 
-                length' snyk-results.json 2>/dev/null || echo 0
+                length' snyk.json 2>/dev/null || echo 0
             fi
           }
 
@@ -569,7 +542,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: snyk-results
-          path: snyk-results.json
+          path: snyk.json
           retention-days: 30
 
       - name: Comment PR with Security Scan Results
@@ -652,14 +625,14 @@ jobs:
               comment += `| 🔵 Low | ${lowSlaBreaches} | ${lowSlaBreachesNoFix} | ${lowSlaStatus} |\n\n`;
             }
 
-            // Read snyk-results.json to extract vulnerability details
+            // Read snyk.json to extract vulnerability details
             const fs = require('fs');
             let snykData = null;
             try {
-              const snykResults = fs.readFileSync('snyk-results.json', 'utf8');
+              const snykResults = fs.readFileSync('snyk.json', 'utf8');
               snykData = JSON.parse(snykResults);
             } catch (error) {
-              console.log('Could not read snyk-results.json:', error.message);
+              console.log('Could not read snyk.json:', error.message);
             }
 
             // Add detailed SLA breach listings if we have data
