@@ -96,8 +96,7 @@ jobs:
             CLEANED_ARGS=$(echo "$USER_ARGS" | sed 's/--json[= ]*[^ ]*//g' | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
             SNYK_ARGS="--json $CLEANED_ARGS"
           else
-            # Default args if none provided
-            SNYK_ARGS="--json --all-projects"
+            SNYK_ARGS="--json"
           fi
 
           echo "Running: snyk test $SNYK_ARGS"
