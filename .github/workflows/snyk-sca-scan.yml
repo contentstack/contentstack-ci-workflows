@@ -7,6 +7,11 @@ on:
         required: false
         type: string
         default: ""
+      args:
+        description: "Additional arguments to pass to Snyk command (e.g., --all-projects, --file=go.mod). --json is automatically added."
+        required: false
+        type: string
+        default: ""
 
 env:
   # Threshold for maximum number of critical severity issues allowed
@@ -84,13 +89,18 @@ jobs:
         id: snyk-test
         continue-on-error: true
         run: |
-          LANGUAGE="${{ inputs.language }}"
-          # For Go projects, don't use --all-projects as it tries to scan GOROOT
-          if [ "$LANGUAGE" = "golang" ] || [ "$LANGUAGE" = "go" ]; then
-            SNYK_ARGS="--json"
+          USER_ARGS="${{ inputs.args }}"
+
+          if [ -n "$USER_ARGS" ]; then
+            # Remove --json if user provided it (handle both --json and --json=...)
+            CLEANED_ARGS=$(echo "$USER_ARGS" | sed 's/--json[= ]*[^ ]*//g' | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
+            SNYK_ARGS="--json $CLEANED_ARGS"
           else
+            # Default args if none provided
             SNYK_ARGS="--json --all-projects"
           fi
+
+          echo "Running: snyk test $SNYK_ARGS"
 
           docker run --rm \
             -v "$PWD:/project" \
@@ -100,7 +110,7 @@ jobs:
             -e SNYK_INTEGRATION_VERSION="${{ steps.snyk-integration.outputs.version }}" \
             -w /project \
             ${{ steps.snyk-image.outputs.image }} \
-            snyk test $SNYK_ARGS > snyk-results.json || true
+            snyk test $SNYK_ARGS > snyk-results.json
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
