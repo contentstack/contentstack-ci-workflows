@@ -12,6 +12,11 @@ on:
         required: false
         type: string
         default: ""
+      go-version:
+        description: "Go version to use for Golang projects (e.g., '1.23', '1.24', 'stable'). Only used when language is golang."
+        required: false
+        type: string
+        default: "stable"
 
 env:
   # Threshold for maximum number of critical severity issues allowed
@@ -46,17 +51,40 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run Snyk to check for vulnerabilities (Golang)
+      - name: Setup Go (for Golang projects)
+        if: inputs.language == 'golang' || inputs.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go-version }}
+
+      - name: Install Snyk CLI (for Golang projects)
+        if: inputs.language == 'golang' || inputs.language == 'go'
+        uses: snyk/actions/setup@master
+
+      - name: Run Snyk to check for vulnerabilities (Golang - CLI)
         if: inputs.language == 'golang' || inputs.language == 'go'
         id: snyk-test-golang
         continue-on-error: true
-        uses: snyk/actions/golang@master
+        run: |
+          USER_ARGS="${{ inputs.args }}"
+
+          # Build the command with --json flag
+          if [ -n "$USER_ARGS" ]; then
+            # Remove --json if user provided it to avoid duplication
+            CLEANED_ARGS=$(echo "$USER_ARGS" | sed -E 's/(^|[[:space:]])--json([[:space:]]|$)/ /g' | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
+            if [ -n "$CLEANED_ARGS" ]; then
+              SNYK_ARGS="--json $CLEANED_ARGS"
+            else
+              SNYK_ARGS="--json"
+            fi
+          else
+            SNYK_ARGS="--json"
+          fi
+
+          echo "Running: snyk test $SNYK_ARGS"
+          snyk test $SNYK_ARGS > snyk.json || true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          command: test
-          json: true
-          args: ${{ inputs.args }}
 
       - name: Run Snyk to check for vulnerabilities (Node.js)
         if: inputs.language == 'node' || inputs.language == 'npm' || inputs.language == 'nodejs'
