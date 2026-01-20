@@ -99,7 +99,15 @@ jobs:
             SNYK_ARGS="--json"
           fi
 
-          echo "Running: snyk test $SNYK_ARGS"
+          echo "==================================="
+          echo "Snyk Command Debug Info"
+          echo "==================================="
+          echo "User Args Input: '$USER_ARGS'"
+          echo "Language: '$LANGUAGE'"
+          echo "Final Snyk Args: '$SNYK_ARGS'"
+          echo "Docker Image: ${{ steps.snyk-image.outputs.image }}"
+          echo "Full Command: snyk test $SNYK_ARGS"
+          echo "==================================="
 
           docker run --rm \
             -v "$PWD:/project" \
