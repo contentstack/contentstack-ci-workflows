@@ -57,70 +57,115 @@ jobs:
         with:
           go-version: ${{ inputs.go-version }}
 
+      - name: Configure Git for private Go modules (for Golang projects)
+        if: inputs.language == 'golang' || inputs.language == 'go'
+        run: |
+          # Configure Git to use authentication for private repositories
+          # This is REQUIRED if your Go project has private dependencies
+
+          # Option 1: Use USER_NAME + PERSONAL_ACCESS_TOKEN (recommended for private repos)
+          if [ -n "${{ secrets.USER_NAME }}" ] && [ -n "${{ secrets.PERSONAL_ACCESS_TOKEN }}" ]; then
+            git config --global url."https://${{ secrets.USER_NAME }}:${{ secrets.PERSONAL_ACCESS_TOKEN }}@github.com".insteadOf "https://github.com"
+            echo "✓ Git configured for private Go modules using USER_NAME and PERSONAL_ACCESS_TOKEN"
+          # Option 2: Fallback to GITHUB_TOKEN (works for same-org repos)
+          elif [ -n "${{ secrets.GITHUB_TOKEN }}" ]; then
+            git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+            echo "✓ Git configured for private Go modules using GITHUB_TOKEN"
+          else
+            echo "⚠️  Warning: No authentication configured. Private Go modules will fail to download."
+            echo "    Please set USER_NAME + PERSONAL_ACCESS_TOKEN secrets for private dependencies."
+          fi
+
+      - name: Download Go dependencies (for Golang projects)
+        if: inputs.language == 'golang' || inputs.language == 'go'
+        run: |
+          if [ -f go.mod ]; then
+            echo "Downloading Go dependencies..."
+            go mod download
+            # Rebuild the standard library to fix build ID mismatches
+            echo "Rebuilding Go standard library..."
+            go install std
+          fi
+
       - name: Install Snyk CLI (for Golang projects)
         if: inputs.language == 'golang' || inputs.language == 'go'
         uses: snyk/actions/setup@master
 
-      - name: Run Snyk to check for vulnerabilities (Golang - CLI)
-        if: inputs.language == 'golang' || inputs.language == 'go'
-        id: snyk-test-golang
+      - name: Run Snyk Test
+        id: snyk-test
         continue-on-error: true
         run: |
-          USER_ARGS="${{ inputs.args }}"
+          LANG="${{ inputs.language }}"
 
-          # Build the command with --json flag
-          if [ -n "$USER_ARGS" ]; then
-            # Remove --json if user provided it to avoid duplication
-            CLEANED_ARGS=$(echo "$USER_ARGS" | sed -E 's/(^|[[:space:]])--json([[:space:]]|$)/ /g' | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
-            if [ -n "$CLEANED_ARGS" ]; then
-              SNYK_ARGS="--json $CLEANED_ARGS"
+          echo "==================================="
+          echo "Running Snyk Test for: ${LANG:-auto-detect}"
+          echo "==================================="
+
+          # ============================================
+          # GOLANG: Use Snyk CLI directly (requires special setup)
+          # ============================================
+          if [ "$LANG" = "golang" ] || [ "$LANG" = "go" ]; then
+            USER_ARGS="${{ inputs.args }}"
+            
+            # Build the command with --json flag
+            if [ -n "$USER_ARGS" ]; then
+              # Remove --json if user provided it to avoid duplication
+              CLEANED_ARGS=$(echo "$USER_ARGS" | sed -E 's/(^|[[:space:]])--json([[:space:]]|$)/ /g' | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
+              if [ -n "$CLEANED_ARGS" ]; then
+                SNYK_ARGS="--json $CLEANED_ARGS"
+              else
+                SNYK_ARGS="--json"
+              fi
             else
               SNYK_ARGS="--json"
             fi
+            
+            echo "Command: snyk test $SNYK_ARGS"
+            snyk test $SNYK_ARGS > snyk.json || true
+            
+          # ============================================
+          # NODE.JS: Use official Snyk Node.js action
+          # ============================================
+          elif [ "$LANG" = "node" ] || [ "$LANG" = "npm" ] || [ "$LANG" = "nodejs" ]; then
+            echo "Using Snyk Node.js action..."
+            # Create a temporary script to call the action via Docker
+            docker run --rm \
+              -e SNYK_TOKEN="${{ secrets.SNYK_TOKEN }}" \
+              -v "$(pwd):/project" \
+              -w /project \
+              snyk/snyk:node \
+              snyk test --json ${{ inputs.args }} > snyk.json || true
+            
+          # ============================================
+          # PYTHON: Use official Snyk Python action
+          # ============================================
+          elif [ "$LANG" = "python" ] || [ "$LANG" = "pip" ]; then
+            echo "Using Snyk Python action..."
+            docker run --rm \
+              -e SNYK_TOKEN="${{ secrets.SNYK_TOKEN }}" \
+              -v "$(pwd):/project" \
+              -w /project \
+              snyk/snyk:python \
+              snyk test --json ${{ inputs.args }} > snyk.json || true
+            
+          # ============================================
+          # DEFAULT/AUTO-DETECT: Use Snyk with auto-detection
+          # ============================================
           else
-            SNYK_ARGS="--json"
+            echo "Using Snyk auto-detection..."
+            docker run --rm \
+              -e SNYK_TOKEN="${{ secrets.SNYK_TOKEN }}" \
+              -v "$(pwd):/project" \
+              -w /project \
+              snyk/snyk:node \
+              snyk test --json ${{ inputs.args }} > snyk.json || true
           fi
 
-          echo "Running: snyk test $SNYK_ARGS"
-          snyk test $SNYK_ARGS > snyk.json || true
+          echo "==================================="
+          echo "Snyk test completed"
+          echo "==================================="
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      - name: Run Snyk to check for vulnerabilities (Node.js)
-        if: inputs.language == 'node' || inputs.language == 'npm' || inputs.language == 'nodejs'
-        id: snyk-test-node
-        continue-on-error: true
-        uses: snyk/actions/node@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          command: test
-          json: true
-          args: ${{ inputs.args }}
-
-      - name: Run Snyk to check for vulnerabilities (Python)
-        if: inputs.language == 'python' || inputs.language == 'pip'
-        id: snyk-test-python
-        continue-on-error: true
-        uses: snyk/actions/python@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          command: test
-          json: true
-          args: ${{ inputs.args }}
-
-      - name: Run Snyk to check for vulnerabilities (Default/Auto-detect)
-        if: inputs.language == '' || (inputs.language != 'golang' && inputs.language != 'go' && inputs.language != 'node' && inputs.language != 'npm' && inputs.language != 'nodejs' && inputs.language != 'python' && inputs.language != 'pip')
-        id: snyk-test-default
-        continue-on-error: true
-        uses: snyk/actions/node@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          command: test
-          json: true
-          args: ${{ inputs.args }}
 
       - name: Debug - Log Snyk JSON results
         if: always()
