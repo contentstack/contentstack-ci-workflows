@@ -60,14 +60,9 @@ jobs:
       - name: Configure Git for private Go modules (for Golang projects)
         if: inputs.language == 'golang' || inputs.language == 'go'
         run: |
-          # Configure Git to use authentication for private repositories
-          # This is REQUIRED if your Go project has private dependencies
-
-          # Option 1: Use USER_NAME + PERSONAL_ACCESS_TOKEN (recommended for private repos)
           if [ -n "${{ secrets.USER_NAME }}" ] && [ -n "${{ secrets.PERSONAL_ACCESS_TOKEN }}" ]; then
             git config --global url."https://${{ secrets.USER_NAME }}:${{ secrets.PERSONAL_ACCESS_TOKEN }}@github.com".insteadOf "https://github.com"
             echo "✓ Git configured for private Go modules using USER_NAME and PERSONAL_ACCESS_TOKEN"
-          # Option 2: Fallback to GITHUB_TOKEN (works for same-org repos)
           elif [ -n "${{ secrets.GITHUB_TOKEN }}" ]; then
             git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
             echo "✓ Git configured for private Go modules using GITHUB_TOKEN"
