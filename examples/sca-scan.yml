@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Create sample Snyk report
         run: |
-          cat > snyk-report.json <<'JSON'
+          cat > snyk.json <<'JSON'
           {
             "vulnerabilities": [
               {
@@ -58,7 +58,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: snyk-report
-          path: snyk-report.json
+          path: snyk.json
 
   analyze:
     needs: generate-report

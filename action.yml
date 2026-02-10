@@ -1,5 +1,5 @@
 name: "Snyk SCA Scan Analysis"
-description: "Composite action that reads snyk-report.json from the current directory, analyzes severities and SLA breaches, and posts a PR comment"
+description: "Composite action that reads snyk.json from the current directory, analyzes severities and SLA breaches, and posts a PR comment"
 inputs:
   MAX_CRITICAL_ISSUES:
     description: 'Maximum allowed critical issues (with fixes)'
@@ -116,10 +116,10 @@ runs:
           const fs = require('fs');
           let snykData = null;
           try {
-            const snykResults = fs.readFileSync('snyk-report.json', 'utf8');
+            const snykResults = fs.readFileSync('snyk.json', 'utf8');
             snykData = JSON.parse(snykResults);
           } catch (error) {
-            console.log('Could not read snyk-report.json:', error.message);
+            console.log('Could not read snyk.json:', error.message);
           }
 
           if (failBuild === 'true') {

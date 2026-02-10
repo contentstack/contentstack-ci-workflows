@@ -7,9 +7,9 @@ if ! command -v jq >/dev/null 2>&1; then
   sudo apt-get install -y -qq jq >/dev/null 2>&1 || true
 fi
 
-echo "Verifying snyk-report.json exists..."
-if [ ! -f snyk-report.json ]; then
-  echo "Error: snyk-report.json not found"
+echo "Verifying snyk.json exists..."
+if [ ! -f snyk.json ]; then
+  echo "Error: snyk.json not found"
   echo "fail_build=true" >> "$GITHUB_OUTPUT" || true
   exit 1
 fi
@@ -30,15 +30,15 @@ SLA_MEDIUM_NO_FIX="${SLA_MEDIUM_NO_FIX:-365}"
 SLA_LOW_NO_FIX="${SLA_LOW_NO_FIX:-365}"
 
 echo "Counting vulnerabilities (only with fixes are counted toward thresholds)..."
-critical_count=$(jq -r '[.vulnerabilities[]? | select(.severity == "critical" and (.isUpgradable == true or .isPatchable == true))] | length' snyk-report.json 2>/dev/null || echo 0)
-high_count=$(jq -r '[.vulnerabilities[]? | select(.severity == "high" and (.isUpgradable == true or .isPatchable == true))] | length' snyk-report.json 2>/dev/null || echo 0)
-medium_count=$(jq -r '[.vulnerabilities[]? | select(.severity == "medium" and (.isUpgradable == true or .isPatchable == true))] | length' snyk-report.json 2>/dev/null || echo 0)
-low_count=$(jq -r '[.vulnerabilities[]? | select(.severity == "low" and (.isUpgradable == true or .isPatchable == true))] | length' snyk-report.json 2>/dev/null || echo 0)
+critical_count=$(jq -r '[.vulnerabilities[]? | select(.severity == "critical" and (.isUpgradable == true or .isPatchable == true))] | length' snyk.json 2>/dev/null || echo 0)
+high_count=$(jq -r '[.vulnerabilities[]? | select(.severity == "high" and (.isUpgradable == true or .isPatchable == true))] | length' snyk.json 2>/dev/null || echo 0)
+medium_count=$(jq -r '[.vulnerabilities[]? | select(.severity == "medium" and (.isUpgradable == true or .isPatchable == true))] | length' snyk.json 2>/dev/null || echo 0)
+low_count=$(jq -r '[.vulnerabilities[]? | select(.severity == "low" and (.isUpgradable == true or .isPatchable == true))] | length' snyk.json 2>/dev/null || echo 0)
 
-critical_no_fix=$(jq -r '[.vulnerabilities[]? | select(.severity == "critical" and (.isUpgradable != true and .isPatchable != true))] | length' snyk-report.json 2>/dev/null || echo 0)
-high_no_fix=$(jq -r '[.vulnerabilities[]? | select(.severity == "high" and (.isUpgradable != true and .isPatchable != true))] | length' snyk-report.json 2>/dev/null || echo 0)
-medium_no_fix=$(jq -r '[.vulnerabilities[]? | select(.severity == "medium" and (.isUpgradable != true and .isPatchable != true))] | length' snyk-report.json 2>/dev/null || echo 0)
-low_no_fix=$(jq -r '[.vulnerabilities[]? | select(.severity == "low" and (.isUpgradable != true and .isPatchable != true))] | length' snyk-report.json 2>/dev/null || echo 0)
+critical_no_fix=$(jq -r '[.vulnerabilities[]? | select(.severity == "critical" and (.isUpgradable != true and .isPatchable != true))] | length' snyk.json 2>/dev/null || echo 0)
+high_no_fix=$(jq -r '[.vulnerabilities[]? | select(.severity == "high" and (.isUpgradable != true and .isPatchable != true))] | length' snyk.json 2>/dev/null || echo 0)
+medium_no_fix=$(jq -r '[.vulnerabilities[]? | select(.severity == "medium" and (.isUpgradable != true and .isPatchable != true))] | length' snyk.json 2>/dev/null || echo 0)
+low_no_fix=$(jq -r '[.vulnerabilities[]? | select(.severity == "low" and (.isUpgradable != true and .isPatchable != true))] | length' snyk.json 2>/dev/null || echo 0)
 
 echo "Exporting counts to GITHUB_ENV..."
 echo "critical_count=$critical_count" >> "$GITHUB_ENV"
@@ -67,14 +67,14 @@ count_sla_breaches() {
        select(.severity == $sev and (.isUpgradable == true or .isPatchable == true)) |
        select(.publicationTime != null) |
        select(($current | tonumber) - (.publicationTime | fromdateiso8601) > ($threshold | tonumber * 86400))] |
-      length' snyk-report.json 2>/dev/null || echo 0
+      length' snyk.json 2>/dev/null || echo 0
   else
     jq --arg current "$current_time" --arg threshold "$threshold" --arg sev "$severity" -r '
       [.vulnerabilities[]? |
        select(.severity == $sev and (.isUpgradable != true and .isPatchable != true)) |
        select(.publicationTime != null) |
        select(($current | tonumber) - (.publicationTime | fromdateiso8601) > ($threshold | tonumber * 86400))] |
-      length' snyk-report.json 2>/dev/null || echo 0
+      length' snyk.json 2>/dev/null || echo 0
   fi
 }
 
