@@ -1,9 +1,9 @@
 # Snyk SCA Scan (composite action)
 
-Analyzes a Snyk JSON report (`snyk-report.json`) for severity thresholds and SLA breaches. Counts only vulnerabilities that have available fixes (upgrades or patches) toward configured thresholds, generates a summary in the GitHub Actions step summary, uploads the report artifact, and optionally comments on pull requests.
+Analyzes a Snyk JSON report (`snyk.json`) for severity thresholds and SLA breaches. Counts only vulnerabilities that have available fixes (upgrades or patches) toward configured thresholds, generates a summary in the GitHub Actions step summary, uploads the report artifact, and optionally comments on pull requests.
 
 ## Inputs
-- `snyk-report-artifact` (required): Name of the artifact containing `snyk-report.json` (e.g. `snyk-report`).
+- `snyk-report-artifact` (required): Name of the artifact containing `snyk.json` (e.g. `snyk-report`).
 - `MAX_CRITICAL_ISSUES`, `MAX_HIGH_ISSUES`, `MAX_MEDIUM_ISSUES`, `MAX_LOW_ISSUES` (optional): numeric thresholds for allowed vulnerabilities with fixes. Defaults are `1`, `1`, `500`, `1000`.
 - `SLA_CRITICAL_WITH_FIX`, `SLA_HIGH_WITH_FIX`, `SLA_MEDIUM_WITH_FIX`, `SLA_LOW_WITH_FIX` (optional): SLA days for vulnerabilities with fixes. Defaults are `15`, `30`, `90`, `180`.
 - `SLA_CRITICAL_NO_FIX`, `SLA_HIGH_NO_FIX`, `SLA_MEDIUM_NO_FIX`, `SLA_LOW_NO_FIX` (optional): SLA days for vulnerabilities without fixes. Defaults are `30`, `120`, `365`, `365`.
@@ -13,7 +13,7 @@ Analyzes a Snyk JSON report (`snyk-report.json`) for severity thresholds and SLA
 
 ## Example usage
 
-This action expects a `snyk-report.json` uploaded as an artifact. Example workflow that runs Snyk, uploads the report, then calls this action:
+This action expects a `snyk.json` uploaded as an artifact. Example workflow that runs Snyk, uploads the report, then calls this action:
 
 ```yaml
 name: Run Snyk and analyze
@@ -26,13 +26,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run Snyk test (example)
         run: |
-          # run Snyk and output JSON to snyk-report.json
-          snyk test --json > snyk-report.json || true
+          # run Snyk and output JSON to snyk.json
+          snyk test --json > snyk.json || true
       - name: Upload Snyk report
         uses: actions/upload-artifact@v4
         with:
           name: snyk-report
-          path: snyk-report.json
+          path: snyk.json
 
   analyze-snyk:
     needs: snyk-test
