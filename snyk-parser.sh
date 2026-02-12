@@ -14,6 +14,15 @@ if [ ! -f snyk.json ]; then
   exit 1
 fi
 
+echo "Normalizing snyk.json structure..."
+if jq -e 'type == "array"' snyk.json >/dev/null 2>&1; then
+  echo "  -> snyk.json is an array (multi-project output), merging all vulnerabilities..."
+  merged=$(jq '{ vulnerabilities: [ .[].vulnerabilities[]? ] }' snyk.json)
+  echo "$merged" > snyk.json
+else
+  echo "  -> snyk.json is a single object, no normalization needed"
+fi
+
 # Load thresholds from environment (inputs provided by action.yml)
 MAX_CRITICAL_ISSUES="${MAX_CRITICAL_ISSUES:-1}"
 MAX_HIGH_ISSUES="${MAX_HIGH_ISSUES:-1}"
